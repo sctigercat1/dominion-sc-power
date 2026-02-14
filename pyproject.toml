@@ -1,0 +1,87 @@
+[project]
+name = "dominion-sc-power"
+version = "0.0.1"
+license = {text = "Apache-2.0"}
+authors = [
+    { name="sctigercat1" },
+]
+description = "dominion-sc-power"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.8",
+    "xmltodict>=1.0.2",
+    "ruff>=0.14.14"
+]
+
+
+[project.urls]
+"Homepage" = "https://github.com/sctigercat1/dominion-sc-power"
+"Bug Tracker" = "https://github.com/sctigercat1/dominion-sc-power/issues"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 127
+exclude = [
+    ".git", ".mypy_cache", ".ruff_cache", ".venv", "__pypackages__",
+    "build", "dist", "venv", "*_pb2.py", "*_pb2_grpc.py", "*.pyi"
+]
+
+[tool.ruff.lint]
+select = [
+    "A",  # flake8-builtins
+    "ASYNC",  # flake8-async
+    "B",  # flake8-bugbear
+    "C",  # flake8-mccabe
+    "C4",  # flake8-comprehensions
+    "D",  # pydocstyle
+    "E",  # pycodestyle (error)
+    "F",  # pyflakes
+    "G",  # flake8-logging-format
+    "I",  # isort
+    "PGH",  # pygrep-hooks
+    "RET",  # flake8-return
+    "RUF",  # Ruff-specific rules
+    "S",  # flake8-bandit (security)
+    "SIM",  # flake8-simplify
+    "T20",  # flake8-print
+    "TCH",  # flake8-type-checking
+    "TRY",  # tryceratops
+    "UP",  # pyupgrade
+    "W",  # pycodestyle (warning)
+]
+ignore = [
+    "S101",
+    "D203",
+    "D213",
+    "PLR0913",
+    "PLR1714",
+    "PLR2004",
+    "TRY003",
+    "ASYNC230",
+    "ASYNC250",
+    "T201",
+]
+fixable = ["ALL"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.mypy]
+python_version = "3.11"
+exclude = [".venv", "venv", "build"]
+pretty = true
+strict = true
+show_error_codes = true
+warn_incomplete_stub = true
+enable_error_code = ["ignore-without-code", "redundant-self", "truthy-iterable"]
+
+[tool.codespell]
+skip = "*.json,*.csv,*.lock,./.git/*,./.venv/*"
+check-filenames = true
+check-hidden = true
+
