@@ -10,10 +10,13 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.8",
-    "xmltodict>=1.0.2",
-    "ruff>=0.14.14"
+    "xmltodict>=1.0.2"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.14.14"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/sctigercat1/dominion-sc-power"

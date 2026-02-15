@@ -17,14 +17,14 @@ jobs:
       - name: Set up Python
         uses: "actions/setup-python@v6"
         with:
-          python-version: "3.13"
+          python-version: "3.11"
           cache: "pip"
 
       - name: Update pip
         run: python3 -m pip install --upgrade pip
 
       - name: Install requirements
-        run: python3 -m pip install -e .
+        run: python3 -m pip install -e ".[dev]"
 
       - name: Lint
         run: python3 -m ruff check .
