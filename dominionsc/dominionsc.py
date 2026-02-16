@@ -8,7 +8,7 @@ from typing import Any
 
 import aiohttp
 import xmltodict
-from aiohttp.client_exceptions import ClientError, ClientResponseError
+from aiohttp.client_exceptions import ClientError
 
 from .const import USER_AGENT
 from .exceptions import ApiException, CannotConnect, InvalidAuth
@@ -62,22 +62,24 @@ class DominionSC:
         self.accounts: list[str] = []
 
     async def async_login(self) -> None:
-        """Login to the utility website and authorize opower.com for access.
+        """Login to the utility website and authorize for access.
 
         :raises InvalidAuth: if login information is incorrect
         :raises MfaChallenge: if interactive MFA is required
         :raises CannotConnect: if we receive any HTTP error
+        :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
         try:
             self.access_token, self.user_id, self.accounts = await self.utility.async_login(
                 self.session, self.username, self.password, self.login_data
             )
-        except ClientResponseError as err:
-            if err.status in (401, 403):
-                raise InvalidAuth(err) from err
-            raise CannotConnect(err) from err
         except ClientError as err:
-            raise CannotConnect(err) from err
+            raise CannotConnect(
+                "Failed to connect to API",
+                url=getattr(err, "url", None),
+                status=getattr(err, "status", None),
+                response_text=getattr(err, "text", None),
+            ) from err
 
     async def async_get_accounts(self) -> list[str]:
         """Get a list of accounts for the signed in user."""
@@ -87,14 +89,16 @@ class DominionSC:
         """Get the timezone used by the utility."""
         return self.utility.timezone
 
-    async def async_get_forecast(self) -> list[Forecast]:
+    async def async_get_forecast(self) -> Forecast:
         """Get current and forecasted usage and cost for the current monthly bill.
 
         :raises InvalidAuth: if login information is incorrect
+        :raises CannotConnect: if there is a retryable connection exception
+        :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
         accounts = await self.async_get_accounts()
         if not accounts:
-            raise InvalidAuth("User not logged in to retrieve async_get_forecast!")
+            raise InvalidAuth("User not logged in to retrieve async_get_forecast.")
 
         forecasted_data = await self.utility.async_get_forecast(self.session)
 
@@ -113,7 +117,11 @@ class DominionSC:
         start_date: datetime | None = None,
         end_date: datetime | None = None,
     ) -> list[UsageRead]:
-        """Get the usage reads from bidgely endpoint."""
+        """Get the usage reads from bidgely endpoint.
+
+        :raises CannotConnect: if there is a retryable connection exception
+        :raises ApiException: if API response cannot be parsed (API structure may have changed)
+        """
         result: list[UsageRead] = []
 
         # Floor the dates to midnight UTC (how the API accepts data)
@@ -127,31 +135,35 @@ class DominionSC:
             f"&measurement-type={account}&file-type=XML"
         )
         r = await self._async_get_request(url, self._get_headers())
-        energy_usage = xmltodict.parse(r)
+        try:
+            energy_usage = xmltodict.parse(r)
 
-        for entry in energy_usage["feed"]["entry"]:
-            if not entry["title"].startswith("Interval Consumption"):
-                continue
+            for entry in energy_usage["feed"]["entry"]:
+                if not entry["title"].startswith("Interval Consumption"):
+                    continue
 
-            intervals = entry["content"]["espi:IntervalBlock"]["espi:IntervalReading"]
-            # intervals_start_time = entry["content"]["espi:IntervalBlock"]["espi:interval"]["espi:start"]  # Day
-            for interval in intervals:
-                time_start = int(interval["espi:timePeriod"]["espi:start"])
-                duration = int(interval["espi:timePeriod"]["espi:duration"])  # 900 sec (15 min) (electric) or 3600 (1hr) (gas)
-                time_end = time_start + duration - 1
-                consumption = int(interval["espi:value"])  # in Wh (electric) or ft^3 (gas)
-                result.append(
-                    UsageRead(
-                        start_time=datetime.fromtimestamp(time_start, UTC).replace(
-                            tzinfo=zoneinfo.ZoneInfo(self.utility.timezone)
-                        ),
-                        end_time=datetime.fromtimestamp(time_end, UTC).replace(
-                            tzinfo=zoneinfo.ZoneInfo(self.utility.timezone)
-                        ),
-                        consumption=consumption,
+                intervals = entry["content"]["espi:IntervalBlock"]["espi:IntervalReading"]
+                for interval in intervals:
+                    time_start = int(interval["espi:timePeriod"]["espi:start"])
+                    duration = int(
+                        interval["espi:timePeriod"]["espi:duration"]
+                    )  # 900 sec (15 min) (electric) or 3600 (1hr) (gas)
+                    time_end = time_start + duration - 1
+                    consumption = int(interval["espi:value"])  # in Wh (electric) or ft^3 (gas)
+                    result.append(
+                        UsageRead(
+                            start_time=datetime.fromtimestamp(time_start, UTC).replace(
+                                tzinfo=zoneinfo.ZoneInfo(self.utility.timezone)
+                            ),
+                            end_time=datetime.fromtimestamp(time_end, UTC).replace(
+                                tzinfo=zoneinfo.ZoneInfo(self.utility.timezone)
+                            ),
+                            consumption=consumption,
+                        )
                     )
-                )
-        return result
+            return result
+        except Exception as err:
+            raise ApiException("Unable to parse XML in async_get_usage_reads.", url=url, response_text=r) from err
 
     def _get_headers(self) -> dict[str, str]:
         headers = {
@@ -173,6 +185,11 @@ class DominionSC:
         try:
             async with self.session.get(url, headers=headers) as resp:
                 result = await resp.text(encoding="utf-8")
-        except ClientError as e:
-            raise ApiException(f"Client Error: {e}", url=url) from e
+        except ClientError as err:
+            raise CannotConnect(
+                f"Failed to connect to API: {err}",
+                url=url,
+                status=getattr(err, "status", None),
+                response_text=getattr(err, "text", None),
+            ) from err
         return result

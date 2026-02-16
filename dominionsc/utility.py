@@ -1,6 +1,5 @@
-"""Base class that each utility needs to extend."""
+"""Base class that for the Dominion Energy SC utility."""
 
-# import abc
 import json
 import logging
 import re
@@ -11,7 +10,7 @@ from typing import Any
 import aiohttp
 
 from .const import USER_AGENT
-from .exceptions import CannotConnect, InvalidAuth, MfaChallenge
+from .exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
 
 _LOGGER = logging.getLogger(__file__)
 
@@ -33,13 +32,18 @@ class DominionSCURLHandler:
         elif method == "get":
             api_func = self._session.get
         else:
-            raise ValueError("improper method for API call: {method}. must be get or post")
+            raise ValueError(f"Improper method for API call: {method}. Must be GET or POST.")
 
         try:
             async with api_func(url, json=json_data, headers=headers) as resp:
                 result = await resp.text(encoding="utf-8")
         except aiohttp.ClientError as err:
-            raise CannotConnect(f"Failed to make an API call with error: {err}") from err
+            raise CannotConnect(
+                "Failed to make an API call due to network error.",
+                url=url,
+                status=getattr(err, "status", None),
+                response_text=getattr(err, "text", None),
+            ) from err
         return result
 
 
@@ -54,16 +58,16 @@ class DominionSCUtility:
         self.bidgely_endpoint: str = "https://desc-prodapi.bidgely.com"
         self.timezone: str = "America/New_York"
 
-    def _find_verification_token(self, webpage: str) -> str | None:
+    def _find_verification_token(self, webpage: str, path: str, funct: str) -> str | None:
         try:
             token_search = re.findall(r'<input name="__RequestVerificationToken" type="hidden" value="(.*)" \/>', webpage)
             return token_search[0].split('" />', 1)[0]
         except Exception as err:
-            raise CannotConnect("Cannot retrieve initial request verification token: {err}") from err
+            raise CannotConnect(f"Cannot retrieve request verification token (path={path}, funct={funct}).") from err
 
     async def async_login(
         self, session: aiohttp.ClientSession, username: str, password: str, login_data: dict[str, str] | None = None
-    ) -> tuple[str, str, bool, bool | None]:
+    ) -> tuple[str, str, list | None]:
         """Login to the utility website.
 
         Return the access token or None
@@ -71,7 +75,7 @@ class DominionSCUtility:
         :raises InvalidAuth: if login information is incorrect
         :raises MfaChallenge: if interactive MFA is required
         :raises CannotConnect: if there is a retryable connection exception
-        :raises aiohttp.ClientError: if there is a network error
+        :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
         if login_data is None:
             login_data = {}  # {tfa_token: tfa_token}
@@ -84,7 +88,7 @@ class DominionSCUtility:
             "User-Agent": USER_AGENT,
         }
         r0 = await url_handler.call_api("get", self._dominion_endpoint + "/access/#login", headers0)
-        verification_token = self._find_verification_token(r0)
+        verification_token = self._find_verification_token(r0, "/access", "async_login")
 
         # Initial authentication test
         url1 = self._dominion_endpoint + "/fusionapi/LoginWebApi/Authenticate/"
@@ -99,9 +103,17 @@ class DominionSCUtility:
         }
         body = {"userName": username, "password": password, "_df": ""}
         r1 = await url_handler.call_api("post", url1, headers1, body)
-        r1_status = json.loads(r1)["data"]["status"]
+        try:
+            r1_status = json.loads(r1)["data"]["status"]
+        except Exception as err:
+            raise ApiException("Unable to decode Authenticate data status.", url=url1, response_text=r1) from err
+        if r1_status == "failed":
+            raise InvalidAuth(f"Invalid credentials, please try again. {r1}")
         if r1_status != "twoFA":
-            raise InvalidAuth(f"Error with login, possible invalid credentials: {r1_status}")
+            raise InvalidAuth(
+                "Unsuccessful authentication (possible no TFA required, please "
+                f"report on github if you get this error): resp={r1}"
+            )
 
         # TFA
         # Do we have a TFA token?
@@ -128,7 +140,7 @@ class DominionSCUtility:
         }
 
         r3 = await url_handler.call_api("get", self._dominion_endpoint + "/", headers2)
-        verification_token = self._find_verification_token(r3)
+        verification_token = self._find_verification_token(r3, "/", "async_login")
 
         headers1["__RequestVerificationToken"] = verification_token
         headers1["Referer"] = "https://account.dominionenergysc.com/"
@@ -137,8 +149,12 @@ class DominionSCUtility:
         tt = str(int(time.time() * 1000))
         url4 = self._dominion_endpoint + f"/fusionapi/AccountManagementWebApi/GetAccountListing/?_={tt}"
         r4 = await url_handler.call_api("get", url4, headers1)
+        try:
+            _ = json.loads(r4)["data"]["singleAccount"]
+        except Exception as err:
+            raise ApiException("Unable to decode GetAccountListing singleAccount.", url=url4, response_text=r4) from err
         if json.loads(r4)["data"]["singleAccount"] is not True:
-            raise InvalidAuth(f"User has multiple accounts, not currently implemented: {r4}")
+            raise InvalidAuth(f"User has multiple accounts, not currently implemented (please report on github): {r4}")
 
         tt = str(int(time.time() * 1000))
         url5 = self._dominion_endpoint + f"/fusionapi/AccountSummaryWebApi/InitAccount/?_={tt}"
@@ -147,7 +163,7 @@ class DominionSCUtility:
         try:
             serviceAddressAndAccountNo = json.loads(r5)["data"]["account"]["serviceAddressAndAccountNo"]
         except Exception as err:
-            raise InvalidAuth(f"Unable to init account ({err}): {r5}") from err
+            raise ApiException("Unable to decode InitAccount serviceAddr.", url=url5, response_text=r5) from err
 
         tt = str(int(time.time() * 1000))
         url6 = self._dominion_endpoint + f"/fusionapi/BidgelyWebApi/GetBidgelySDKInit/?service=E&serviceAccountType=R&_={tt}"
@@ -155,7 +171,7 @@ class DominionSCUtility:
         try:
             encryptedToken = json.loads(r6)["data"]["payload"]
         except Exception as err:
-            raise ValueError(f"unable to init bidgely ({err}): {r6}") from err
+            raise ApiException("Unable to decode GetBidgelySDKInit encToken", url=url6, response_text=r6) from err
 
         # Finally get bearer
         url7 = self.bidgely_endpoint + "/v2.0/web/wc-session"
@@ -179,13 +195,16 @@ class DominionSCUtility:
             accessToken = r7_json["payload"]["tokenDetails"]["accessToken"]
             userId = r7_json["payload"]["userProfileDetails"]["userId"]
         except Exception as err:
-            raise InvalidAuth(f"unable to get accessToken or userId ({err}): {r7}") from err
+            raise ApiException("Unable to get accessToken or userId.", url=url7, response_text=r7) from err
 
         accounts = [[]]
         accounts.append(serviceAddressAndAccountNo)
-        for dataTypes in json.loads(r7)["payload"]["userTypeDetails"]["measurementToUserTypeMappings"]:
-            if dataTypes["measurementType"] in ["ELECTRIC", "GAS"]:
-                accounts[0].append(dataTypes["measurementType"])
+        try:
+            for dataTypes in json.loads(r7)["payload"]["userTypeDetails"]["measurementToUserTypeMappings"]:
+                if dataTypes["measurementType"] in ["ELECTRIC", "GAS"]:
+                    accounts[0].append(dataTypes["measurementType"])
+        except Exception as err:
+            raise ApiException("Unable to decode measurement type from wc-session.", url=url7, response_text=r7) from err
 
         return accessToken, userId, accounts
 
@@ -195,6 +214,7 @@ class DominionSCUtility:
         Return a dictionary with relevant data.
 
         :raises CannotConnect: if there is a retryable connection exception
+        :raises ApiException: if API response cannot be parsed (API structure may have changed)
         """
         url_handler = DominionSCURLHandler(session=session)
 
@@ -205,7 +225,7 @@ class DominionSCUtility:
         }
 
         r0 = await url_handler.call_api("get", self._dominion_endpoint + "/", headers0)
-        verification_token = self._find_verification_token(r0)
+        verification_token = self._find_verification_token(r0, "/", "async_get_forecast")
 
         tt = str(int(time.time() * 1000))
         url1 = self._dominion_endpoint + f"/fusionapi/CommonWebApi/GetAccountAMIUsageAlerts/?_={tt}"
@@ -234,7 +254,7 @@ class DominionSCUtility:
             else:
                 typical_cost = None
         except Exception as err:
-            raise CannotConnect(f"Failed to get forecast data ({err}): {r1}") from err
+            raise ApiException("Failed to decode forecast data.", url=url1, response_text=r1) from err
 
         return {
             "start_date": start_date,
@@ -276,7 +296,10 @@ class DominionSCTFAHandler:
         tt = str(int(time.time() * 1000))
         url1 = self._dominion_endpoint + f"/fusionapi/LoginWebApi/InitAuthentication/?_={tt}"
         r1 = await self._url_handler.call_api("get", url1, self._headers)
-        _tfa_options = json.loads(r1)["data"]["userInfo"]
+        try:
+            _tfa_options = json.loads(r1)["data"]["userInfo"]
+        except Exception as err:
+            raise ApiException("Unable to decode InitAuthentication (TFA) userInfo", url=url1, response_text=r1) from err
         tfa_phone = _tfa_options["phoneNumbers"]
         tfa_email = _tfa_options["emailAddresses"]
 
@@ -299,7 +322,7 @@ class DominionSCTFAHandler:
         data1 = {"sendMethod": option_id, "_df": ""}
         r1 = await self._url_handler.call_api("post", url1, self._headers, data1)
         if not json.loads(r1)["data"]:
-            raise CannotConnect(f"Error with TFA option selection: {r1}")
+            raise ApiException("Error with TFA option selection.", url=url1, response_text=r1)
 
         _LOGGER.debug("Successfully selected TFA option")
 
@@ -316,8 +339,11 @@ class DominionSCTFAHandler:
         url1 = self._dominion_endpoint + "/fusionapi/LoginWebApi/VerifyPIN/"
         data1 = {"PINcode": code, "registerDevice": True, "_df": ""}
         r1 = await self._url_handler.call_api("post", url1, self._headers, data1)
-        if json.loads(r1)["data"]["isVerified"]:
-            # tfa_token SUCCESS
-            return {"tfa_token": json.loads(r1)["data"]["token"]}
+        try:
+            if json.loads(r1)["data"]["isVerified"]:
+                # tfa_token SUCCESS
+                return {"tfa_token": json.loads(r1)["data"]["token"]}
+        except Exception as err:
+            raise ApiException("Unable to decode VerifyPIN isVerified", url=url1, response_text=r1) from err
 
-        raise InvalidAuth(f"Bad TFA code: {r1}")
+        raise InvalidAuth(f"Invalid TFA code: {r1}")
