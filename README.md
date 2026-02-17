@@ -88,16 +88,15 @@ python -m dominionsc -vv
 ```python
 import asyncio
 import aiohttp
-from dominionsc import DominionSC, DominionSCUtility, create_cookie_jar
+from dominionsc import DominionSC, create_cookie_jar
 from datetime import datetime, timedelta
 
 async def main():
-    utility = DominionSCUtility()
     username = "your_username"
     password = "your_password"
     
     async with aiohttp.ClientSession(cookie_jar=create_cookie_jar()) as session:
-        client = DominionSC(session, utility, username, password)
+        client = DominionSC(session, username, password)
         
         # Login
         await client.async_login()
@@ -151,7 +150,7 @@ except MfaChallenge as e:
     login_data = await handler.async_submit_tfa_code(code)
     
     # Save login_data to skip TFA next time
-    # Pass it as: DominionSC(session, utility, username, password, login_data)
+    # Pass it as: DominionSC(session, username, password, login_data)
     
     # Retry login
     client.login_data = login_data

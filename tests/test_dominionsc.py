@@ -442,9 +442,7 @@ class TestDominionSC:
 
         with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
             with pytest.raises(InvalidAuth, match="Invalid credentials"):
-                await dominion_client._async_login_internal(
-                    dominion_client.session, "bad_user", "bad_pass"
-                )
+                await dominion_client._async_login_internal(dominion_client.session, "bad_user", "bad_pass")
 
     @pytest.mark.asyncio
     async def test_async_login_internal_unexpected_status(self, dominion_client):
@@ -456,9 +454,7 @@ class TestDominionSC:
 
         with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
             with pytest.raises(InvalidAuth, match="Unsuccessful authentication"):
-                await dominion_client._async_login_internal(
-                    dominion_client.session, "test_user", "test_pass"
-                )
+                await dominion_client._async_login_internal(dominion_client.session, "test_user", "test_pass")
 
     @pytest.mark.asyncio
     async def test_async_login_internal_invalid_tfa_token(self, dominion_client):
@@ -488,9 +484,7 @@ class TestDominionSC:
 
         with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
             with pytest.raises(MfaChallenge):
-                await dominion_client._async_login_internal(
-                    dominion_client.session, "test_user", "test_pass"
-                )
+                await dominion_client._async_login_internal(dominion_client.session, "test_user", "test_pass")
 
     @pytest.mark.asyncio
     async def test_async_login_internal_multiple_accounts(self, dominion_client):
@@ -523,9 +517,7 @@ class TestDominionSC:
 
         with patch.object(DominionSCURLHandler, "call_api", new=AsyncMock(side_effect=responses)):
             with pytest.raises(ApiException, match="Unable to decode Authenticate data status"):
-                await dominion_client._async_login_internal(
-                    dominion_client.session, "test_user", "test_pass"
-                )
+                await dominion_client._async_login_internal(dominion_client.session, "test_user", "test_pass")
 
     @pytest.mark.asyncio
     async def test_async_login_internal_account_listing_error(self, dominion_client):
@@ -680,7 +672,7 @@ class TestDominionSC:
     async def test_async_get_forecast_success(self, dominion_client):
         """Test successful forecast retrieval."""
         dominion_client.accounts = ["account1"]
-        
+
         with patch.object(
             dominion_client,
             "_async_get_forecast_internal",
