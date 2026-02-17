@@ -2,19 +2,18 @@
 
 from .dominionsc import (
     DominionSC,
+    DominionSCTFAHandler,
     Forecast,
     UsageRead,
 )
 from .exceptions import ApiException, CannotConnect, InvalidAuth, MfaChallenge
 from .helpers import create_cookie_jar
-from .utility import DominionSCTFAHandler, DominionSCUtility
 
 __all__ = [
     "ApiException",
     "CannotConnect",
     "DominionSC",
     "DominionSCTFAHandler",
-    "DominionSCUtility",
     "Forecast",
     "InvalidAuth",
     "MfaChallenge",

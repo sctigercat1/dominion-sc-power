@@ -10,7 +10,7 @@ from getpass import getpass
 
 import aiohttp
 
-from dominionsc import DominionSC, DominionSCUtility, InvalidAuth, MfaChallenge, create_cookie_jar
+from dominionsc import DominionSC, InvalidAuth, MfaChallenge, create_cookie_jar
 
 
 async def _main() -> None:
@@ -48,7 +48,6 @@ async def _main() -> None:
 
     logging.basicConfig(level=logging.DEBUG - args.verbose + 1 if args.verbose > 0 else logging.INFO)
 
-    utility = DominionSCUtility()
     username = args.username or input("Username: ")
     password = args.password or getpass("Password: ")
     login_data = None
@@ -60,7 +59,7 @@ async def _main() -> None:
             pass
 
     async with aiohttp.ClientSession(cookie_jar=create_cookie_jar()) as session:
-        dominionsc = DominionSC(session, utility, username, password, login_data)
+        dominionsc = DominionSC(session, username, password, login_data)
         try:
             await dominionsc.async_login()
         except MfaChallenge as e:
