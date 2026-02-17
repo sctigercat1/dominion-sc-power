@@ -1,6 +1,6 @@
 # dominion-sc-power
 
-A Python library for accessing historical and forecasted energy usage and cost data from Dominion Energy South Carolina's API.
+A Python library for accessing historical and forecasted energy usage and cost data for Dominion Energy South Carolina customers.
 
 This library is used by the custom [Home Assistant Integration for Dominion Energy SC](https://github.com/sctigercat1/ha-dominion-sc).
 
@@ -67,7 +67,7 @@ python -m dominionsc --username your_username --password your_password
 python -m dominionsc --start_date 2025-02-01 --end_date 2025-02-08 --csv output.csv
 
 # Store TFA token for reuse
-python -m dominionsc --login_data_file login.json
+python -m dominionsc --login_data_file data.json
 
 # Verbose logging
 python -m dominionsc -vv

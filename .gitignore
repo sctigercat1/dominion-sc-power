@@ -136,6 +136,7 @@ Thumbs.db
 
 # Data files
 out*.txt
-login_data*.txt
+login*.txt
 data*.json
 data*.txt
+login*.json

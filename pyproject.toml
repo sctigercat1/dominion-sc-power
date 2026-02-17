@@ -1,11 +1,11 @@
 [project]
 name = "dominion-sc-power"
 version = "0.0.1"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 authors = [
     { name="sctigercat1" },
 ]
-description = "dominion-sc-power"
+description = "Async library for accessing Dominion Energy SC API"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
