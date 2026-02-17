@@ -18,11 +18,8 @@ This library is used by the custom [Home Assistant Integration for Dominion Ener
 - TFA is required (again mainly because I do not know what the flow without TFA looks like) - report this error under issues if it applies to you
 - No explicit support for solar (grid export)
 - Data is delayed by 24-48 hours as this is when it is reported by Dominion
-- Some of the current implementation is a little clunky - will probably be refactored in a future update
 
 ## Installation
-
-- Not yet available on PyPi (will be eventually) - for now see development environment instructions below.
 
 ```bash
 pip install dominion-sc-power
